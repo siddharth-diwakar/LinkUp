@@ -28,7 +28,7 @@ function formatEndTime(timeValue: string): string {
 
 export async function GET(
   _request: Request,
-  context: { params: { groupId: string } },
+  context: { params: Promise<{ groupId: string }> },
 ) {
   const supabase = await createClient();
   const { data: authData, error: authError } =
@@ -38,10 +38,11 @@ export async function GET(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { groupId } = context.params;
+  const { groupId } = await context.params;
   const userId = authData.claims.sub;
+  const admin = createAdminClient();
 
-  const { data: membership, error: membershipError } = await supabase
+  const { data: membership, error: membershipError } = await admin
     .from("group_members")
     .select("group_id")
     .eq("group_id", groupId)
@@ -59,7 +60,6 @@ export async function GET(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const admin = createAdminClient();
   const { data: members, error: membersError } = await admin
     .from("group_members")
     .select("user_id, profiles ( display_name )")
