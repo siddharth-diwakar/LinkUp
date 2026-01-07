@@ -8,6 +8,11 @@ type MemberRow = {
   profiles?: { display_name: string | null } | null;
 };
 
+type MemberRowRaw = {
+  user_id: string;
+  profiles?: { display_name: string | null }[] | { display_name: string | null } | null;
+};
+
 export default async function GroupPage({
   params,
 }: {
@@ -30,8 +35,17 @@ export default async function GroupPage({
     .select("user_id, profiles ( display_name )")
     .eq("group_id", groupId);
 
-  const memberRows = (members ?? []) as MemberRow[];
-  const sortedMembers = [...memberRows].sort((a, b) => {
+  const memberRows = (members ?? []) as MemberRowRaw[];
+  const normalizedMembers: MemberRow[] = memberRows.map((member) => {
+    const profile = Array.isArray(member.profiles)
+      ? member.profiles[0]
+      : member.profiles;
+    return {
+      user_id: member.user_id,
+      profiles: profile ?? null,
+    };
+  });
+  const sortedMembers = [...normalizedMembers].sort((a, b) => {
     const nameA = a.profiles?.display_name?.trim() || a.user_id;
     const nameB = b.profiles?.display_name?.trim() || b.user_id;
     return nameA.localeCompare(nameB);

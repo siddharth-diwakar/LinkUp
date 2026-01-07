@@ -8,6 +8,11 @@ type MemberRow = {
   profiles?: { display_name: string | null } | null;
 };
 
+type MemberRowRaw = {
+  user_id: string;
+  profiles?: { display_name: string | null }[] | { display_name: string | null } | null;
+};
+
 type BusyBlockRow = {
   user_id: string;
   start_time: string;
@@ -72,8 +77,17 @@ export async function GET(
     );
   }
 
-  const memberRows = members as MemberRow[];
-  const userIds = memberRows.map((member) => member.user_id);
+  const memberRows = members as MemberRowRaw[];
+  const normalizedMembers: MemberRow[] = memberRows.map((member) => {
+    const profile = Array.isArray(member.profiles)
+      ? member.profiles[0]
+      : member.profiles;
+    return {
+      user_id: member.user_id,
+      profiles: profile ?? null,
+    };
+  });
+  const userIds = normalizedMembers.map((member) => member.user_id);
 
   if (userIds.length === 0) {
     return NextResponse.json(
@@ -143,7 +157,7 @@ export async function GET(
   }> = [];
   const unknown: Array<{ user_id: string; display_name: string }> = [];
 
-  for (const member of memberRows) {
+  for (const member of normalizedMembers) {
     const displayName = member.profiles?.display_name?.trim();
     const name = displayName || member.user_id;
 

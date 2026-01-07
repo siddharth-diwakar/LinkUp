@@ -1,8 +1,13 @@
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 
 import { createClient } from "@/lib/supabase/server";
 
-export default async function Home() {
+function HomeFallback() {
+  return <div className="min-h-screen bg-background" />;
+}
+
+async function HomeRedirect() {
   const supabase = await createClient();
   const { data, error } = await supabase.auth.getClaims();
 
@@ -11,4 +16,12 @@ export default async function Home() {
   }
 
   redirect("/dashboard");
+}
+
+export default function Home() {
+  return (
+    <Suspense fallback={<HomeFallback />}>
+      <HomeRedirect />
+    </Suspense>
+  );
 }
