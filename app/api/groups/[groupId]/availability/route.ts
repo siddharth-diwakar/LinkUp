@@ -19,6 +19,24 @@ type BusyBlockRow = {
   end_time: string;
 };
 
+const TIME_ZONE = "America/Chicago";
+const WEEKDAY_LOOKUP: Record<string, number> = {
+  Mon: 1,
+  Tue: 2,
+  Wed: 3,
+  Thu: 4,
+  Fri: 5,
+  Sat: 6,
+  Sun: 7,
+};
+const NOW_FORMATTER = new Intl.DateTimeFormat("en-US", {
+  timeZone: TIME_ZONE,
+  weekday: "short",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+});
+
 function timeToMinutes(timeValue: string): number {
   const [hours, minutes, seconds] = timeValue.split(":").map(Number);
   const safeHours = Number.isFinite(hours) ? hours : 0;
@@ -28,7 +46,27 @@ function timeToMinutes(timeValue: string): number {
 }
 
 function formatEndTime(timeValue: string): string {
-  return timeValue.slice(0, 5);
+  const [hoursRaw, minutesRaw] = timeValue.split(":");
+  const hours = Number(hoursRaw);
+  const minutes = Number(minutesRaw);
+  const safeHours = Number.isFinite(hours) ? hours : 0;
+  const safeMinutes = Number.isFinite(minutes) ? minutes : 0;
+  const period = safeHours >= 12 ? "PM" : "AM";
+  const displayHours = ((safeHours + 11) % 12) + 1;
+  return `${displayHours}:${safeMinutes.toString().padStart(2, "0")}${period}`;
+}
+
+function getCurrentTimeParts() {
+  const parts = NOW_FORMATTER.formatToParts(new Date());
+  const weekdayLabel = parts.find((part) => part.type === "weekday")?.value;
+  const hours = parts.find((part) => part.type === "hour")?.value ?? "00";
+  const minutes = parts.find((part) => part.type === "minute")?.value ?? "00";
+  const weekday = weekdayLabel ? WEEKDAY_LOOKUP[weekdayLabel] : undefined;
+  return {
+    weekday: weekday ?? 1,
+    hours: Number(hours),
+    minutes: Number(minutes),
+  };
 }
 
 export async function GET(
@@ -110,11 +148,10 @@ export async function GET(
 
   const uploadedSet = new Set((uploads ?? []).map((row) => row.user_id));
 
-  const now = new Date();
-  const jsDay = now.getDay();
-  const weekday = jsDay === 0 ? 7 : jsDay;
+  const nowParts = getCurrentTimeParts();
+  const weekday = nowParts.weekday;
   const isWeekday = weekday >= 1 && weekday <= 5;
-  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  const nowMinutes = nowParts.hours * 60 + nowParts.minutes;
 
   let busyBlocks: BusyBlockRow[] = [];
   if (isWeekday) {

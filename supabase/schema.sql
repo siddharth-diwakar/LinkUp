@@ -138,6 +138,7 @@ create policy "Users can create groups"
 -- Group members: members can read, users can join for themselves
 drop policy if exists "Group members can view membership" on public.group_members;
 drop policy if exists "Users can join groups" on public.group_members;
+drop policy if exists "Users can leave groups" on public.group_members;
 create policy "Group members can view membership"
   on public.group_members
   for select
@@ -149,6 +150,12 @@ create policy "Users can join groups"
   for insert
   to authenticated
   with check (auth.uid() = user_id);
+
+create policy "Users can leave groups"
+  on public.group_members
+  for delete
+  to authenticated
+  using (auth.uid() = user_id);
 
 -- Calendar uploads: owners only
 drop policy if exists "Users manage their calendar uploads" on public.calendar_uploads;

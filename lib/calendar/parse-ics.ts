@@ -20,11 +20,37 @@ type ParsedEvent = {
 
 const WEEKDAY_MIN = 1;
 const WEEKDAY_MAX = 5;
+const CALENDAR_TIME_ZONE = "America/Chicago";
+const WEEKDAY_LOOKUP: Record<string, number> = {
+  Mon: 1,
+  Tue: 2,
+  Wed: 3,
+  Thu: 4,
+  Fri: 5,
+  Sat: 6,
+  Sun: 7,
+};
+const TIME_FORMATTER = new Intl.DateTimeFormat("en-US", {
+  timeZone: CALENDAR_TIME_ZONE,
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+});
+const WEEKDAY_FORMATTER = new Intl.DateTimeFormat("en-US", {
+  timeZone: CALENDAR_TIME_ZONE,
+  weekday: "short",
+});
 
 function formatTime(value: Date): string {
-  const hours = value.getHours().toString().padStart(2, "0");
-  const minutes = value.getMinutes().toString().padStart(2, "0");
+  const parts = TIME_FORMATTER.formatToParts(value);
+  const hours = parts.find((part) => part.type === "hour")?.value ?? "00";
+  const minutes = parts.find((part) => part.type === "minute")?.value ?? "00";
   return `${hours}:${minutes}:00`;
+}
+
+function getWeekdayInZone(value: Date): number | null {
+  const label = WEEKDAY_FORMATTER.format(value);
+  return WEEKDAY_LOOKUP[label] ?? null;
 }
 
 function extractWeekdays(event: ParsedEvent): number[] {
@@ -49,11 +75,10 @@ function extractWeekdays(event: ParsedEvent): number[] {
   }
 
   if (event.start instanceof Date) {
-    const jsWeekday = event.start.getDay();
-    if (jsWeekday === 0) {
-      return [7];
+    const weekday = getWeekdayInZone(event.start);
+    if (weekday) {
+      return [weekday];
     }
-    return [jsWeekday];
   }
 
   return [];

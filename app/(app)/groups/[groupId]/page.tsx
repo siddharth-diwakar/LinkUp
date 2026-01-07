@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 
 import { AvailabilityPanel } from "@/components/groups/availability-panel";
+import { LeaveGroupButton } from "@/components/groups/leave-group-button";
 import { createClient } from "@/lib/supabase/server";
 
 type MemberRow = {
@@ -67,6 +68,7 @@ export default async function GroupPage({
           </span>
           <span>{sortedMembers.length} members</span>
         </div>
+        <LeaveGroupButton groupId={group.id} />
       </header>
       <div className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
         <section className="rounded-3xl border border-border/60 bg-card/80 p-6 shadow-sm">
