@@ -19,6 +19,13 @@ type BusyBlockRow = {
   end_time: string;
 };
 
+type BusyInterval = {
+  startMinutes: number;
+  endMinutes: number;
+  start_time: string;
+  end_time: string;
+};
+
 const TIME_ZONE = "America/Chicago";
 const WEEKDAY_LOOKUP: Record<string, number> = {
   Mon: 1,
@@ -54,6 +61,67 @@ function formatTime(timeValue: string): string {
   const period = safeHours >= 12 ? "PM" : "AM";
   const displayHours = ((safeHours + 11) % 12) + 1;
   return `${displayHours}:${safeMinutes.toString().padStart(2, "0")}${period}`;
+}
+
+function mergeBusyIntervals(blocks: BusyBlockRow[]) {
+  const grouped = new Map<string, BusyInterval[]>();
+
+  for (const block of blocks) {
+    const startMinutes = timeToMinutes(block.start_time);
+    const endMinutes = timeToMinutes(block.end_time);
+
+    if (!Number.isFinite(startMinutes) || !Number.isFinite(endMinutes)) {
+      continue;
+    }
+
+    if (endMinutes <= startMinutes) {
+      continue;
+    }
+
+    const existing = grouped.get(block.user_id) ?? [];
+    existing.push({
+      startMinutes,
+      endMinutes,
+      start_time: block.start_time,
+      end_time: block.end_time,
+    });
+    grouped.set(block.user_id, existing);
+  }
+
+  const mergedByUser = new Map<string, BusyInterval[]>();
+  for (const [userId, intervals] of grouped.entries()) {
+    intervals.sort((a, b) => {
+      if (a.startMinutes !== b.startMinutes) {
+        return a.startMinutes - b.startMinutes;
+      }
+      return a.endMinutes - b.endMinutes;
+    });
+
+    const merged: BusyInterval[] = [];
+    for (const interval of intervals) {
+      const last = merged.at(-1);
+      if (!last) {
+        merged.push({ ...interval });
+        continue;
+      }
+
+      // Merge overlapping or back-to-back blocks so "busy until" reflects the
+      // end of the contiguous class run (e.g., 10-1 and 1-3 => busy until 3).
+      if (interval.startMinutes <= last.endMinutes) {
+        if (interval.endMinutes > last.endMinutes) {
+          last.endMinutes = interval.endMinutes;
+          last.end_time = interval.end_time;
+        }
+        continue;
+      }
+
+      merged.push({ ...interval });
+    }
+
+    mergedByUser.set(userId, merged);
+  }
+
+  return mergedByUser;
 }
 
 function parseTimeParam(timeValue: string | null) {
@@ -204,31 +272,37 @@ export async function GET(
     busyBlocks = (blocks ?? []) as BusyBlockRow[];
   }
 
+  const mergedBusyBlocksByUser = mergeBusyIntervals(busyBlocks);
+
   const busyMap = new Map<string, { busy_until: string; endMinutes: number }>();
   const nextBusyMap = new Map<
     string,
     { startMinutes: number; startLabel: string }
   >();
 
-  for (const block of busyBlocks) {
-    const startMinutes = timeToMinutes(block.start_time);
-    const endMinutes = timeToMinutes(block.end_time);
-    if (startMinutes > referenceMinutes) {
-      const existingNext = nextBusyMap.get(block.user_id);
-      if (!existingNext || startMinutes < existingNext.startMinutes) {
-        nextBusyMap.set(block.user_id, {
-          startMinutes,
-          startLabel: formatTime(block.start_time),
-        });
+  for (const [userId, intervals] of mergedBusyBlocksByUser.entries()) {
+    for (const interval of intervals) {
+      if (interval.startMinutes > referenceMinutes) {
+        const existingNext = nextBusyMap.get(userId);
+        if (!existingNext || interval.startMinutes < existingNext.startMinutes) {
+          nextBusyMap.set(userId, {
+            startMinutes: interval.startMinutes,
+            startLabel: formatTime(interval.start_time),
+          });
+        }
       }
-    }
-    if (startMinutes <= referenceMinutes && referenceMinutes < endMinutes) {
-      const existing = busyMap.get(block.user_id);
-      if (!existing || endMinutes > existing.endMinutes) {
-        busyMap.set(block.user_id, {
-          busy_until: formatTime(block.end_time),
-          endMinutes,
-        });
+
+      if (
+        interval.startMinutes <= referenceMinutes &&
+        referenceMinutes < interval.endMinutes
+      ) {
+        const existing = busyMap.get(userId);
+        if (!existing || interval.endMinutes > existing.endMinutes) {
+          busyMap.set(userId, {
+            busy_until: formatTime(interval.end_time),
+            endMinutes: interval.endMinutes,
+          });
+        }
       }
     }
   }
